@@ -198,6 +198,8 @@ namespace dwarfone
         public static void DumpDWARF(ELF elf)
         {
             Console.WriteLine("DWARF v1 dump ---------------\n");
+            Console.WriteLine(".debug File Offset: 0x" + elf.debug_offset.ToString("x"));
+            Console.WriteLine(".debug Size: 0x" + elf.debug_size.ToString("x"));
             MemoryStream elf_data = new MemoryStream(elf.elf);
             elf_data.Seek(elf.debug_offset, SeekOrigin.Begin);
 
@@ -206,7 +208,7 @@ namespace dwarfone
                 long cur_pos = elf_data.Position;
                 uint size = ELF.ReadUInt32(elf_data, elf.GetEndian());
 
-                if (size >= 6)
+                if (size >= 8)
                 {
                     ushort tag = ELF.ReadUInt16(elf_data, elf.GetEndian());
                     Console.WriteLine("\n" + (cur_pos - elf.debug_offset).ToString("x") + ": <" + size + "> " + Enum.GetName(typeof(Tag), tag));
@@ -216,6 +218,12 @@ namespace dwarfone
                         ushort at = ELF.ReadUInt16(elf_data, elf.GetEndian());
                         ulong value = 0;
                         string str = "";
+
+                        if (at == 0)
+                        {
+                            elf_data.Seek(-2, SeekOrigin.Current);
+                            break;
+                        }
 
                         switch (at & 0xF)
                         {
@@ -235,13 +243,9 @@ namespace dwarfone
                                 break;
                             case (int)Form.FORM_BLOCK2:
                                 value = ELF.ReadUInt16(elf_data, elf.GetEndian());
-                                for (uint i = 0; i < value; i++)
-                                    elf_data.ReadByte();
                                 break;
                             case (int)Form.FORM_BLOCK4:
                                 value = ELF.ReadUInt32(elf_data, elf.GetEndian());
-                                for (uint i = 0; i < value; i++)
-                                    elf_data.ReadByte();
                                 break;
                         }
 
@@ -270,10 +274,47 @@ namespace dwarfone
                                 break;
                             case (int)Form.FORM_BLOCK2:
                             case (int)Form.FORM_BLOCK4:
-                                Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + "> TODO" + ")");
+                                switch (at & 0xFFF0)
+                                {
+                                    case (int)At.AT_location:
+                                        string loc = "";
+                                        for (uint i = 0; i < value; i++)
+                                        {
+                                            int op = elf_data.ReadByte();
+                                            switch (op)
+                                            {
+                                                case (int)Op.OP_ADDR:
+                                                case (int)Op.OP_BASEREG:
+                                                case (int)Op.OP_CONST:
+                                                case (int)Op.OP_REG:
+                                                    loc += Enum.GetName(typeof(Op), op) + "(0x" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString("x") + ") ";
+                                                    i += 4;
+                                                    break;
+                                                case (int)Op.OP_ADD:
+                                                case (int)Op.OP_DEREF:
+                                                case (int)Op.OP_DEREF2:
+                                                case (int)Op.OP_hi_user:
+                                                case (int)Op.OP_lo_user:
+                                                    loc += Enum.GetName(typeof(Op), op) + " ";
+                                                    break;
+                                            }
+                                        }
+                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + loc + ")");
+                                        break;
+                                    default:
+                                        for (uint i = 0; i < value; i++)
+                                            elf_data.ReadByte();
+                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + "> TODO" + ")");
+                                        break;
+                                }
                                 break;
                         }
                     }
+                }
+                else if (size > 4)
+                {
+                    for (int i = 4; i < size; i++)
+                        elf_data.ReadByte();
                 }
                 else
                 {
