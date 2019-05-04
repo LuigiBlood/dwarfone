@@ -301,6 +301,33 @@ namespace dwarfone
                                         }
                                         Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + loc + ")");
                                         break;
+                                    case (int)At.AT_mod_fund_type:
+                                        string mod_f = "";
+                                        for (uint i = 0; i < (value - 2); i++)
+                                        {
+                                            mod_f += Enum.GetName(typeof(Mod), elf_data.ReadByte()) + " ";
+                                        }
+                                        mod_f += Enum.GetName(typeof(Ft), ELF.ReadUInt16(elf_data, elf.GetEndian()));
+                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + mod_f + ")");
+                                        break;
+                                    case (int)At.AT_mod_u_d_type:
+                                        string mod = "";
+                                        for (uint i = 0; i < (value - 4); i++)
+                                        {
+                                            mod += Enum.GetName(typeof(Mod), elf_data.ReadByte()) + " ";
+                                        }
+                                        mod += "0x" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString("x");
+                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + mod + ")");
+                                        break;
+                                    case (int)At.AT_element_list:
+                                        string list = "";
+                                        long start_pos_list = elf_data.Position;
+                                        while (elf_data.Position < (start_pos_list + (long)value))
+                                        {
+                                            list += "(" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString() + "=\"" + ELF.ReadString(elf_data) + "\")";
+                                        }
+                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + list + ")");
+                                        break;
                                     default:
                                         for (uint i = 0; i < value; i++)
                                             elf_data.ReadByte();
