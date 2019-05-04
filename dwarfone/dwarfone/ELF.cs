@@ -51,8 +51,12 @@ namespace dwarfone
 
         private elf_header hdr;
         private List<section_header> section_hdrs;
-        private byte[] elf;
+        public byte[] elf;
         private int error;          //For future use in main program, 0 = no error, anything else = error
+
+        //For DWARF v1 parsing later:
+        public uint debug_offset;
+        public uint debug_size;
 
         public ELF(string elf_file)
         {
@@ -129,6 +133,11 @@ namespace dwarfone
                 elf_data.Seek(section_hdrs[hdr.e_shstrndx].sh_offset + section_hdrs[i].sh_name_off, SeekOrigin.Begin);
                 section_hdrs[i].sh_name = ReadString(elf_data);
                 Console.WriteLine(section_hdrs[i].sh_name + " - Offset: 0x" + section_hdrs[i].sh_offset.ToString("x"));
+                if (section_hdrs[i].sh_name == ".debug")
+                {
+                    debug_offset = section_hdrs[i].sh_offset;
+                    debug_size = section_hdrs[i].sh_size;
+                }
             }
 
             elf_data.Close();
@@ -139,7 +148,34 @@ namespace dwarfone
             return error;
         }
 
-        static private uint ReadUInt32(MemoryStream stream, int endian)
+        public int GetEndian()
+        {
+            return hdr.e_hdr_data;
+        }
+
+        static public ulong ReadUInt64(MemoryStream stream, int endian)
+        {
+            ulong temp = 0;
+
+            for (int i = 0; i < 4; i++)
+            {
+                if (endian == 1)
+                {
+                    //LE
+                    temp >>= 8;
+                    temp |= (uint)(stream.ReadByte() << 24);
+                }
+                else if (endian == 2)
+                {
+                    //BE
+                    temp <<= 8;
+                    temp |= (uint)stream.ReadByte();
+                }
+            }
+            return temp;
+        }
+
+        static public uint ReadUInt32(MemoryStream stream, int endian)
         {
             uint temp = 0;
 
@@ -161,7 +197,7 @@ namespace dwarfone
             return temp;
         }
 
-        static private ushort ReadUInt16(MemoryStream stream, int endian)
+        static public ushort ReadUInt16(MemoryStream stream, int endian)
         {
             ushort temp = 0;
 
@@ -183,7 +219,7 @@ namespace dwarfone
             return temp;
         }
 
-        static private string ReadString(MemoryStream stream)
+        static public string ReadString(MemoryStream stream)
         {
             char temp = (char)0;
             string str = "";

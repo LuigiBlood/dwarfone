@@ -19,7 +19,12 @@ namespace dwarfone
             else
             {
                 ELF elf = new ELF(args[0]);
-                Console.WriteLine("Error Code: " + elf.GetError());
+                if (elf.GetError() != 0)
+                    Console.WriteLine("Error Code: " + elf.GetError());
+                else
+                    Console.WriteLine("ELF file successfully loaded");
+
+                DWARF.DumpDWARF(elf);
             }
         }
     }
