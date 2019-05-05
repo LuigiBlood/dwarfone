@@ -215,127 +215,12 @@ namespace dwarfone
 
                     while (elf_data.Position < cur_pos + size)
                     {
-                        ushort at = ELF.ReadUInt16(elf_data, elf.GetEndian());
-                        ulong value = 0;
-                        string str = "";
-
-                        if (at == 0)
+                        string text = "";
+                        if (GetAT(elf, elf_data, out text) == 1)
                         {
-                            elf_data.Seek(-2, SeekOrigin.Current);
                             break;
                         }
-
-                        switch (at & 0xF)
-                        {
-                            case (int)Form.FORM_ADDR:
-                            case (int)Form.FORM_REF:
-                            case (int)Form.FORM_DATA4:
-                                value = ELF.ReadUInt32(elf_data, elf.GetEndian());
-                                break;
-                            case (int)Form.FORM_DATA2:
-                                value = ELF.ReadUInt16(elf_data, elf.GetEndian());
-                                break;
-                            case (int)Form.FORM_DATA8:
-                                value = ELF.ReadUInt64(elf_data, elf.GetEndian());
-                                break;
-                            case (int)Form.FORM_STRING:
-                                str = ELF.ReadString(elf_data);
-                                break;
-                            case (int)Form.FORM_BLOCK2:
-                                value = ELF.ReadUInt16(elf_data, elf.GetEndian());
-                                break;
-                            case (int)Form.FORM_BLOCK4:
-                                value = ELF.ReadUInt32(elf_data, elf.GetEndian());
-                                break;
-                        }
-
-                        switch (at & 0xF)
-                        {
-                            case (int)Form.FORM_ADDR:
-                            case (int)Form.FORM_REF:
-                            case (int)Form.FORM_DATA4:
-                            case (int)Form.FORM_DATA2:
-                            case (int)Form.FORM_DATA8:
-                                switch (at & 0xFFF0)
-                                {
-                                    case (int)At.AT_language:
-                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(" + Enum.GetName(typeof(Lang), value) + ")");
-                                        break;
-                                    case (int)At.AT_fund_type:
-                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(" + Enum.GetName(typeof(Ft), value) + ")");
-                                        break;
-                                    default:
-                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(0x" + value.ToString("x") + ")");
-                                        break;
-                                }
-                                break;
-                            case (int)Form.FORM_STRING:
-                                Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(\"" + str + "\")");
-                                break;
-                            case (int)Form.FORM_BLOCK2:
-                            case (int)Form.FORM_BLOCK4:
-                                switch (at & 0xFFF0)
-                                {
-                                    case (int)At.AT_location:
-                                        string loc = "";
-                                        for (uint i = 0; i < value; i++)
-                                        {
-                                            int op = elf_data.ReadByte();
-                                            switch (op)
-                                            {
-                                                case (int)Op.OP_ADDR:
-                                                case (int)Op.OP_BASEREG:
-                                                case (int)Op.OP_CONST:
-                                                case (int)Op.OP_REG:
-                                                    loc += Enum.GetName(typeof(Op), op) + "(0x" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString("x") + ") ";
-                                                    i += 4;
-                                                    break;
-                                                case (int)Op.OP_ADD:
-                                                case (int)Op.OP_DEREF:
-                                                case (int)Op.OP_DEREF2:
-                                                case (int)Op.OP_hi_user:
-                                                case (int)Op.OP_lo_user:
-                                                    loc += Enum.GetName(typeof(Op), op) + " ";
-                                                    break;
-                                            }
-                                        }
-                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + loc + ")");
-                                        break;
-                                    case (int)At.AT_mod_fund_type:
-                                        string mod_f = "";
-                                        for (uint i = 0; i < (value - 2); i++)
-                                        {
-                                            mod_f += Enum.GetName(typeof(Mod), elf_data.ReadByte()) + " ";
-                                        }
-                                        mod_f += Enum.GetName(typeof(Ft), ELF.ReadUInt16(elf_data, elf.GetEndian()));
-                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + mod_f + ")");
-                                        break;
-                                    case (int)At.AT_mod_u_d_type:
-                                        string mod = "";
-                                        for (uint i = 0; i < (value - 4); i++)
-                                        {
-                                            mod += Enum.GetName(typeof(Mod), elf_data.ReadByte()) + " ";
-                                        }
-                                        mod += "0x" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString("x");
-                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + mod + ")");
-                                        break;
-                                    case (int)At.AT_element_list:
-                                        string list = "";
-                                        long start_pos_list = elf_data.Position;
-                                        while (elf_data.Position < (start_pos_list + (long)value))
-                                        {
-                                            list += "(" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString() + "=\"" + ELF.ReadString(elf_data) + "\")";
-                                        }
-                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + list + ")");
-                                        break;
-                                    default:
-                                        for (uint i = 0; i < value; i++)
-                                            elf_data.ReadByte();
-                                        Console.WriteLine("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + "> TODO" + ")");
-                                        break;
-                                }
-                                break;
-                        }
+                        Console.WriteLine(text);
                     }
                 }
                 else if (size > 4)
@@ -348,6 +233,165 @@ namespace dwarfone
                     Console.WriteLine((cur_pos - elf.debug_offset).ToString("x") + ": <" + size + ">");
                 }
             }
+        }
+
+        public static int GetAT(ELF elf, MemoryStream elf_data, out string text)
+        {
+            ushort at = ELF.ReadUInt16(elf_data, elf.GetEndian());
+            ulong value = 0;
+            string str = "";
+
+            text = str;
+
+            if (at == 0)
+            {
+                elf_data.Seek(-2, SeekOrigin.Current);
+                return 1;
+            }
+
+            switch (at & 0xF)
+            {
+                case (int)Form.FORM_ADDR:
+                case (int)Form.FORM_REF:
+                case (int)Form.FORM_DATA4:
+                    value = ELF.ReadUInt32(elf_data, elf.GetEndian());
+                    break;
+                case (int)Form.FORM_DATA2:
+                    value = ELF.ReadUInt16(elf_data, elf.GetEndian());
+                    break;
+                case (int)Form.FORM_DATA8:
+                    value = ELF.ReadUInt64(elf_data, elf.GetEndian());
+                    break;
+                case (int)Form.FORM_STRING:
+                    str = ELF.ReadString(elf_data);
+                    break;
+                case (int)Form.FORM_BLOCK2:
+                    value = ELF.ReadUInt16(elf_data, elf.GetEndian());
+                    break;
+                case (int)Form.FORM_BLOCK4:
+                    value = ELF.ReadUInt32(elf_data, elf.GetEndian());
+                    break;
+            }
+
+            switch (at & 0xF)
+            {
+                case (int)Form.FORM_ADDR:
+                case (int)Form.FORM_REF:
+                case (int)Form.FORM_DATA4:
+                case (int)Form.FORM_DATA2:
+                case (int)Form.FORM_DATA8:
+                    switch (at & 0xFFF0)
+                    {
+                        case (int)At.AT_language:
+                            text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(" + Enum.GetName(typeof(Lang), value) + ")");
+                            break;
+                        case (int)At.AT_fund_type:
+                            text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(" + Enum.GetName(typeof(Ft), value) + ")");
+                            break;
+                        default:
+                            text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(0x" + value.ToString("x") + ")");
+                            break;
+                    }
+                    break;
+                case (int)Form.FORM_STRING:
+                    text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(\"" + str + "\")");
+                    break;
+                case (int)Form.FORM_BLOCK2:
+                case (int)Form.FORM_BLOCK4:
+                    switch (at & 0xFFF0)
+                    {
+                        case (int)At.AT_location:
+                            string loc = "";
+                            for (uint i = 0; i < value; i++)
+                            {
+                                int op = elf_data.ReadByte();
+                                switch (op)
+                                {
+                                    case (int)Op.OP_ADDR:
+                                    case (int)Op.OP_BASEREG:
+                                    case (int)Op.OP_CONST:
+                                    case (int)Op.OP_REG:
+                                        loc += Enum.GetName(typeof(Op), op) + "(0x" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString("x") + ") ";
+                                        i += 4;
+                                        break;
+                                    case (int)Op.OP_ADD:
+                                    case (int)Op.OP_DEREF:
+                                    case (int)Op.OP_DEREF2:
+                                    case (int)Op.OP_hi_user:
+                                    case (int)Op.OP_lo_user:
+                                        loc += Enum.GetName(typeof(Op), op) + " ";
+                                        break;
+                                }
+                            }
+                            text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + loc + ")");
+                            break;
+                        case (int)At.AT_mod_fund_type:
+                            string mod_f = "";
+                            for (uint i = 0; i < (value - 2); i++)
+                            {
+                                mod_f += Enum.GetName(typeof(Mod), elf_data.ReadByte()) + " ";
+                            }
+                            mod_f += Enum.GetName(typeof(Ft), ELF.ReadUInt16(elf_data, elf.GetEndian()));
+                            text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + mod_f + ")");
+                            break;
+                        case (int)At.AT_mod_u_d_type:
+                            string mod = "";
+                            for (uint i = 0; i < (value - 4); i++)
+                            {
+                                mod += Enum.GetName(typeof(Mod), elf_data.ReadByte()) + " ";
+                            }
+                            mod += "0x" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString("x");
+                            text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + mod + ")");
+                            break;
+                        case (int)At.AT_element_list:
+                            string list = "";
+                            long start_pos_list = elf_data.Position;
+                            while (elf_data.Position < (start_pos_list + (long)value))
+                            {
+                                list += "(" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString() + "=\"" + ELF.ReadString(elf_data) + "\")";
+                            }
+                            text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + list + ")");
+                            break;
+                        case (int)At.AT_subscr_data:
+                            long start_pos_sub = elf_data.Position;
+                            string fmt_str = "";
+                            while (elf_data.Position < (start_pos_sub + (long)value))
+                            {
+                                int fmt = elf_data.ReadByte();
+                                string fmt_str_out = "";
+                                switch (fmt)
+                                {
+                                    case (int)Fmt.FMT_ET:
+                                        GetAT(elf, elf_data, out fmt_str_out);
+                                        fmt_str += "FMT_ET: " + fmt_str_out.Substring(8) + ", ";
+                                        break;
+                                    case (int)Fmt.FMT_FT_C_C:
+                                        ushort fmt_ft = ELF.ReadUInt16(elf_data, elf.GetEndian());
+                                        uint lo = ELF.ReadUInt32(elf_data, elf.GetEndian());
+                                        uint hi = ELF.ReadUInt32(elf_data, elf.GetEndian());
+                                        fmt_str += Enum.GetName(typeof(Ft), fmt_ft) + "[" + lo + ":" + hi + "], ";
+                                        break;
+                                    default:
+                                        elf_data.ReadByte();
+                                        break;
+                                }
+                            }
+                            text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + fmt_str.Substring(0, fmt_str.Length - 2) + ")");
+                            break;
+                        case (int)At.AT_discr_value:
+                        case (int)At.AT_string_length:
+                        case (int)At.AT_const_value:
+                        case (int)At.AT_friends:
+                        case (int)At.AT_return_addr:
+                        default:
+                            for (uint i = 0; i < value; i++)
+                                elf_data.ReadByte();
+                            text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + "> TODO" + ")");
+                            break;
+                    }
+                    break;
+            }
+            return 0;
         }
     }
 }
