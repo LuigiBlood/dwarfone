@@ -501,11 +501,35 @@ namespace dwarfone
                         case (int)At.AT_mod_fund_type:
                         {
                             string mod_f = "";
+
+                            // It sometimes happens in SIM.elf (OOT/Majora) that
+                            // the mod byte and the type are switched. It only
+                            // happens when value == 3, so I don't know if a
+                            // more sophisticated check is needed or if this
+                            // suffices...
+                            bool typeOverride = false;
+                            ushort type = 0;
+
                             for (uint i = 0; i < (value - 2); i++)
                             {
-                                mod_f += Enum.GetName(typeof(Mod), elf_data.ReadByte()) + " ";
+                                int mod = elf_data.ReadByte();
+
+                                if(!Enum.IsDefined(typeof(Mod), mod))
+                                {
+                                    typeOverride = true;
+                                    type = (ushort)(mod << 8);
+                                    mod = elf_data.ReadByte();
+                                }
+
+                                mod_f += Enum.GetName(typeof(Mod), mod) + " ";
                             }
-                            mod_f += Enum.GetName(typeof(Ft), ELF.ReadUInt16(elf_data, elf.GetEndian()));
+
+                            if(typeOverride)
+                                type |= (ushort)elf_data.ReadByte();
+                            else
+                                type = ELF.ReadUInt16(elf_data, elf.GetEndian());
+
+                            mod_f += Enum.GetName(typeof(Ft), type);
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + mod_f + ")");
                         } break;
                         case (int)At.AT_mod_u_d_type:
