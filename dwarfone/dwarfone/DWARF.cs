@@ -336,9 +336,11 @@ namespace dwarfone
                 case 8226: // Reference to (global) variable; Used in functions
                     return true;
                 default:
+                {
                     if(!silent)
                         Console.WriteLine($"Failed on at: {at}");
                     return false;
+                }
             }
         }
 
@@ -438,6 +440,7 @@ namespace dwarfone
                 case (int)Form.FORM_DATA4:
                 case (int)Form.FORM_DATA2:
                 case (int)Form.FORM_DATA8:
+                {
                     switch (at & 0xFFF0)
                     {
                         case (int)At.AT_language:
@@ -450,16 +453,19 @@ namespace dwarfone
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(0x" + value.ToString("x") + ")");
                             break;
                     }
-                    break;
+                } break;
                 case (int)Form.FORM_STRING:
+                {
                     text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(\"" + str + "\")");
-                    break;
+                } break;
                 case (int)Form.FORM_BLOCK2:
                 case (int)Form.FORM_BLOCK4:
+                {
                     switch (at & 0xFFF0)
                     {
                         case (int)At.AT_return_addr:
                         case (int)At.AT_location:
+                        {
                             string loc = "";
                             for (uint i = 0; i < value; i++)
                             {
@@ -470,6 +476,7 @@ namespace dwarfone
                                     case (int)Op.OP_BASEREG:
                                     case (int)Op.OP_CONST:
                                     case (int)Op.OP_REG:
+                                    {
                                         uint reg = ELF.ReadUInt32(elf_data, elf.GetEndian());
                                         uint regLE = BinaryPrimitives.ReverseEndianness(reg);
 
@@ -478,19 +485,21 @@ namespace dwarfone
 
                                         loc += $"{Enum.GetName(typeof(Op), op)}(0x{reg.ToString("x")}) ";
                                         i += 4;
-                                        break;
+                                    } break;
                                     case (int)Op.OP_ADD:
                                     case (int)Op.OP_DEREF:
                                     case (int)Op.OP_DEREF2:
                                     case (int)Op.OP_hi_user:
                                     case (int)Op.OP_lo_user:
+                                    {
                                         loc += Enum.GetName(typeof(Op), op) + " ";
-                                        break;
+                                    } break;
                                 }
                             }
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + loc + ")");
-                            break;
+                        } break;
                         case (int)At.AT_mod_fund_type:
+                        {
                             string mod_f = "";
                             for (uint i = 0; i < (value - 2); i++)
                             {
@@ -498,8 +507,9 @@ namespace dwarfone
                             }
                             mod_f += Enum.GetName(typeof(Ft), ELF.ReadUInt16(elf_data, elf.GetEndian()));
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + mod_f + ")");
-                            break;
+                        } break;
                         case (int)At.AT_mod_u_d_type:
+                        {
                             string mod = "";
                             for (uint i = 0; i < (value - 4); i++)
                             {
@@ -507,8 +517,9 @@ namespace dwarfone
                             }
                             mod += "0x" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString("x");
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + mod + ")");
-                            break;
+                        } break;
                         case (int)At.AT_element_list:
+                        {
                             string list = "";
                             long start_pos_list = elf_data.Position;
                             while (elf_data.Position < (start_pos_list + (long)value))
@@ -516,8 +527,9 @@ namespace dwarfone
                                 list += "(" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString() + "=\"" + ELF.ReadString(elf_data) + "\")";
                             }
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + list + ")");
-                            break;
+                        } break;
                         case (int)At.AT_subscr_data:
+                        {
                             long start_pos_sub = elf_data.Position;
                             string fmt_str = "";
                             while (elf_data.Position < (start_pos_sub + (long)value))
@@ -527,34 +539,37 @@ namespace dwarfone
                                 switch (fmt)
                                 {
                                     case (int)Fmt.FMT_ET:
+                                    {
                                         GetAT(elf, elf_data, out fmt_str_out, enableQuirks);
                                         fmt_str += "FMT_ET: " + fmt_str_out.Substring(8) + ", ";
-                                        break;
+                                    } break;
                                     case (int)Fmt.FMT_FT_C_C:
+                                    {
                                         ushort fmt_ft = ELF.ReadUInt16(elf_data, elf.GetEndian());
                                         uint lo = ELF.ReadUInt32(elf_data, elf.GetEndian());
                                         uint hi = ELF.ReadUInt32(elf_data, elf.GetEndian());
                                         fmt_str += Enum.GetName(typeof(Ft), fmt_ft) + "[" + lo + ":" + hi + "], ";
-                                        break;
+                                    } break;
                                     default:
                                         elf_data.ReadByte();
-                                        break;
+                                    break;
                                 }
                             }
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + fmt_str.Substring(0, fmt_str.Length - 2) + ")");
-                            break;
+                        } break;
                         case (int)At.AT_discr_value:
                         case (int)At.AT_string_length:
                         case (int)At.AT_const_value:
                         case (int)At.AT_friends:
                         case (int)At.AT_codewarrior_custom:
                         default:
+                        {
                             for (uint i = 0; i < value; i++)
                                 elf_data.ReadByte();
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + "> TODO" + ")");
-                            break;
+                        } break;
                     }
-                    break;
+                } break;
             }
             return 0;
         }
