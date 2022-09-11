@@ -199,7 +199,7 @@ namespace dwarfone
             FMT_ET = 0x8
         }
 
-        public static void DumpDWARF(ELF elf)
+        public static void DumpDWARF(ELF elf, bool enableQuirks)
         {
             Console.WriteLine("DWARF v1 dump ---------------\n");
             Console.WriteLine(".debug File Offset: 0x" + elf.debug_offset.ToString("x"));
@@ -236,7 +236,7 @@ namespace dwarfone
                     {
                         string text = "";
 
-                        int result = GetAT(elf, elf_data, out text);
+                        int result = GetAT(elf, elf_data, out text, enableQuirks);
                         if (result > 0)
                         {
                             sizeIsLE = result == 2;
@@ -342,7 +342,7 @@ namespace dwarfone
             }
         }
 
-        public static int GetAT(ELF elf, MemoryStream elf_data, out string text)
+        public static int GetAT(ELF elf, MemoryStream elf_data, out string text, bool enableQuirks)
         {
             ushort at = ELF.ReadUInt16(elf_data, elf.GetEndian());
             ulong value = 0;
@@ -473,7 +473,8 @@ namespace dwarfone
                                         uint reg = ELF.ReadUInt32(elf_data, elf.GetEndian());
                                         uint regLE = BinaryPrimitives.ReverseEndianness(reg);
 
-                                        reg = Math.Min(reg, regLE);
+                                        if(enableQuirks)
+                                            reg = Math.Min(reg, regLE);
 
                                         loc += $"{Enum.GetName(typeof(Op), op)}(0x{reg.ToString("x")}) ";
                                         i += 4;
@@ -526,7 +527,7 @@ namespace dwarfone
                                 switch (fmt)
                                 {
                                     case (int)Fmt.FMT_ET:
-                                        GetAT(elf, elf_data, out fmt_str_out);
+                                        GetAT(elf, elf_data, out fmt_str_out, enableQuirks);
                                         fmt_str += "FMT_ET: " + fmt_str_out.Substring(8) + ", ";
                                         break;
                                     case (int)Fmt.FMT_FT_C_C:
