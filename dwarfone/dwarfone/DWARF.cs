@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
@@ -105,6 +106,7 @@ namespace dwarfone
             AT_upper_bound = 0x02F0,
             AT_virtual = 0x0300,
             AT_lo_user = 0x2000,
+            AT_codewarrior_custom = 0x2340,
             AT_hi_user = 0x3FF0
         }
 
@@ -147,6 +149,8 @@ namespace dwarfone
             FT_ext_prec_complex = 0x0016,
             FT_label = 0x0017,
             FT_lo_user = 0x8000,
+            FT_signed_long_long = 0x8008, // MW extension
+            FT_unsigned_long_long = 0x8208, // MW extension
             FT_hi_user = 0xffff
         }
 
@@ -195,7 +199,7 @@ namespace dwarfone
             FMT_ET = 0x8
         }
 
-        public static void DumpDWARF(ELF elf)
+        public static void DumpDWARF(ELF elf, bool enableQuirks)
         {
             Console.WriteLine("DWARF v1 dump ---------------\n");
             Console.WriteLine(".debug File Offset: 0x" + elf.debug_offset.ToString("x"));
@@ -203,21 +207,39 @@ namespace dwarfone
             MemoryStream elf_data = new MemoryStream(elf.elf);
             elf_data.Seek(elf.debug_offset, SeekOrigin.Begin);
 
+            bool sizeIsLE = false;
             while (elf_data.Position < elf.debug_offset + elf.debug_size)
             {
                 long cur_pos = elf_data.Position;
+
                 uint size = ELF.ReadUInt32(elf_data, elf.GetEndian());
+                uint sizeLE = BinaryPrimitives.ReverseEndianness(size);
+
+                if(sizeIsLE)
+                {
+                    size = sizeLE;
+                    sizeIsLE = false;
+                }
+                else
+                    size = Math.Min(size, sizeLE);
 
                 if (size >= 8)
                 {
                     ushort tag = ELF.ReadUInt16(elf_data, elf.GetEndian());
+
+                    if(!Enum.IsDefined(typeof(Tag), (int)tag))
+                        tag = BinaryPrimitives.ReverseEndianness(tag);
+
                     Console.WriteLine("\n" + (cur_pos - elf.debug_offset).ToString("x") + ": <" + size + "> " + Enum.GetName(typeof(Tag), tag));
 
                     while (elf_data.Position < cur_pos + size)
                     {
                         string text = "";
-                        if (GetAT(elf, elf_data, out text) == 1)
+
+                        int result = GetAT(elf, elf_data, out text, enableQuirks);
+                        if (result > 0)
                         {
+                            sizeIsLE = result == 2;
                             break;
                         }
                         Console.WriteLine(text);
@@ -235,7 +257,94 @@ namespace dwarfone
             }
         }
 
-        public static int GetAT(ELF elf, MemoryStream elf_data, out string text)
+        private static bool CheckAt(ushort at, bool silent = false)
+        {
+            switch(at)
+            {
+                case (int)At.AT_sibling            | (int)Form.FORM_REF:
+                case (int)At.AT_location           | (int)Form.FORM_BLOCK2:
+                case (int)At.AT_name               | (int)Form.FORM_STRING:
+                case (int)At.AT_fund_type          | (int)Form.FORM_DATA2:
+                case (int)At.AT_mod_fund_type      | (int)Form.FORM_BLOCK2:
+                case (int)At.AT_user_def_type      | (int)Form.FORM_REF:
+                case (int)At.AT_mod_u_d_type       | (int)Form.FORM_BLOCK2:
+                case (int)At.AT_ordering           | (int)Form.FORM_DATA2:
+                case (int)At.AT_subscr_data        | (int)Form.FORM_BLOCK2:
+                case (int)At.AT_byte_size          | (int)Form.FORM_DATA4:
+                case (int)At.AT_bit_offset         | (int)Form.FORM_DATA2:
+                case (int)At.AT_bit_size           | (int)Form.FORM_DATA4:
+                case (int)At.AT_element_list       | (int)Form.FORM_BLOCK4:
+                case (int)At.AT_stmt_list          | (int)Form.FORM_DATA4:
+                case (int)At.AT_low_pc             | (int)Form.FORM_ADDR:
+                case (int)At.AT_high_pc            | (int)Form.FORM_ADDR:
+                case (int)At.AT_language           | (int)Form.FORM_DATA4:
+                case (int)At.AT_member             | (int)Form.FORM_REF:
+                case (int)At.AT_discr              | (int)Form.FORM_REF:
+                case (int)At.AT_discr_value        | (int)Form.FORM_BLOCK2:
+                case (int)At.AT_string_length      | (int)Form.FORM_BLOCK2:
+                case (int)At.AT_common_reference   | (int)Form.FORM_REF:
+                case (int)At.AT_comp_dir           | (int)Form.FORM_STRING:
+                case (int)At.AT_const_value        | (int)Form.FORM_STRING:
+                case (int)At.AT_const_value        | (int)Form.FORM_DATA2:
+                case (int)At.AT_const_value        | (int)Form.FORM_DATA4:
+                case (int)At.AT_const_value        | (int)Form.FORM_DATA8:
+                case (int)At.AT_const_value        | (int)Form.FORM_BLOCK2:
+                case (int)At.AT_const_value        | (int)Form.FORM_BLOCK4:
+                case (int)At.AT_containing_type    | (int)Form.FORM_REF:
+                case (int)At.AT_default_value      | (int)Form.FORM_ADDR:
+                case (int)At.AT_default_value      | (int)Form.FORM_DATA2:
+                case (int)At.AT_default_value      | (int)Form.FORM_DATA8:
+                case (int)At.AT_default_value      | (int)Form.FORM_STRING:
+                case (int)At.AT_friends            | (int)Form.FORM_BLOCK2:
+                case (int)At.AT_inline             | (int)Form.FORM_STRING:
+                case (int)At.AT_is_optional        | (int)Form.FORM_STRING:
+                case (int)At.AT_lower_bound        | (int)Form.FORM_REF:
+                case (int)At.AT_lower_bound        | (int)Form.FORM_DATA2:
+                case (int)At.AT_lower_bound        | (int)Form.FORM_DATA4:
+                case (int)At.AT_lower_bound        | (int)Form.FORM_DATA8:
+                case (int)At.AT_program            | (int)Form.FORM_STRING:
+                case (int)At.AT_private            | (int)Form.FORM_STRING:
+                case (int)At.AT_producer           | (int)Form.FORM_STRING:
+                case (int)At.AT_protected          | (int)Form.FORM_STRING:
+                case (int)At.AT_prototyped         | (int)Form.FORM_STRING:
+                case (int)At.AT_public             | (int)Form.FORM_STRING:
+                case (int)At.AT_pure_virtual       | (int)Form.FORM_STRING:
+                case (int)At.AT_return_addr        | (int)Form.FORM_BLOCK2:
+                case (int)At.AT_specification      | (int)Form.FORM_REF:
+                case (int)At.AT_start_scope        | (int)Form.FORM_DATA4:
+                case (int)At.AT_stride_size        | (int)Form.FORM_DATA4:
+                case (int)At.AT_upper_bound        | (int)Form.FORM_REF:
+                case (int)At.AT_upper_bound        | (int)Form.FORM_DATA2:
+                case (int)At.AT_upper_bound        | (int)Form.FORM_DATA4:
+                case (int)At.AT_upper_bound        | (int)Form.FORM_DATA8:
+                case (int)At.AT_virtual            | (int)Form.FORM_STRING:
+                case (int)At.AT_lo_user            | (int)Form.FORM_ADDR:
+                case (int)At.AT_lo_user            | (int)Form.FORM_REF:
+                case (int)At.AT_lo_user            | (int)Form.FORM_BLOCK2:
+                case (int)At.AT_lo_user            | (int)Form.FORM_DATA2:
+                case (int)At.AT_lo_user            | (int)Form.FORM_DATA4:
+                case (int)At.AT_lo_user            | (int)Form.FORM_DATA8:
+                case (int)At.AT_lo_user            | (int)Form.FORM_STRING:
+                case (int)At.AT_codewarrior_custom | (int)Form.FORM_BLOCK2:
+                case (int)At.AT_hi_user            | (int)Form.FORM_ADDR:
+                case (int)At.AT_hi_user            | (int)Form.FORM_REF:
+                case (int)At.AT_hi_user            | (int)Form.FORM_BLOCK2:
+                case (int)At.AT_hi_user            | (int)Form.FORM_DATA2:
+                case (int)At.AT_hi_user            | (int)Form.FORM_DATA4:
+                case (int)At.AT_hi_user            | (int)Form.FORM_DATA8:
+                case (int)At.AT_hi_user            | (int)Form.FORM_STRING:
+                case 8226: // Reference to (global) variable; Used in functions
+                    return true;
+                default:
+                {
+                    if(!silent)
+                        Console.WriteLine($"Failed on at: {at}");
+                    return false;
+                }
+            }
+        }
+
+        public static int GetAT(ELF elf, MemoryStream elf_data, out string text, bool enableQuirks)
         {
             ushort at = ELF.ReadUInt16(elf_data, elf.GetEndian());
             ulong value = 0;
@@ -247,6 +356,30 @@ namespace dwarfone
             {
                 elf_data.Seek(-2, SeekOrigin.Current);
                 return 1;
+            }
+
+            bool needSwapping = false;
+            bool swapArgument = true;
+
+            if(!CheckAt(at, true))
+            {
+                at = BinaryPrimitives.ReverseEndianness(at);
+                needSwapping = (at & 0xFFF0) != (int)At.AT_sibling;
+
+                if(CheckAt(at, true))
+                {
+                    if((at & 0xFFF0) == (int)At.AT_high_pc
+                        || (at & 0xFFF0) == (int)At.AT_user_def_type
+                        || at == 8226)
+                    {
+                        swapArgument = false;
+                    }
+                }
+                else
+                {
+                    elf_data.Seek(-2, SeekOrigin.Current);
+                    return 2;
+                }
             }
 
             switch (at & 0xF)
@@ -273,6 +406,33 @@ namespace dwarfone
                     break;
             }
 
+            // Detect stupid edgecase where we have a valid collission with AT_location
+            if((at & 0xFFF0) == (int)At.AT_location && value == 0)
+            {
+                elf_data.Seek(-4, SeekOrigin.Current);
+                return 2;
+            }
+
+            if(needSwapping && swapArgument)
+            {
+                switch (at & 0xF)
+                {
+                    case (int)Form.FORM_ADDR:
+                    case (int)Form.FORM_REF:
+                    case (int)Form.FORM_DATA4:
+                    case (int)Form.FORM_BLOCK4:
+                        value = BinaryPrimitives.ReverseEndianness((UInt32)value);
+                        break;
+                    case (int)Form.FORM_DATA2:
+                    case (int)Form.FORM_BLOCK2:
+                        value = BinaryPrimitives.ReverseEndianness((UInt16)value);
+                        break;
+                    default:
+                        value = BinaryPrimitives.ReverseEndianness((UInt64)value);
+                        break;
+                }
+            }
+
             switch (at & 0xF)
             {
                 case (int)Form.FORM_ADDR:
@@ -280,6 +440,7 @@ namespace dwarfone
                 case (int)Form.FORM_DATA4:
                 case (int)Form.FORM_DATA2:
                 case (int)Form.FORM_DATA8:
+                {
                     switch (at & 0xFFF0)
                     {
                         case (int)At.AT_language:
@@ -292,15 +453,19 @@ namespace dwarfone
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(0x" + value.ToString("x") + ")");
                             break;
                     }
-                    break;
+                } break;
                 case (int)Form.FORM_STRING:
+                {
                     text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(\"" + str + "\")");
-                    break;
+                } break;
                 case (int)Form.FORM_BLOCK2:
                 case (int)Form.FORM_BLOCK4:
+                {
                     switch (at & 0xFFF0)
                     {
+                        case (int)At.AT_return_addr:
                         case (int)At.AT_location:
+                        {
                             string loc = "";
                             for (uint i = 0; i < value; i++)
                             {
@@ -311,30 +476,64 @@ namespace dwarfone
                                     case (int)Op.OP_BASEREG:
                                     case (int)Op.OP_CONST:
                                     case (int)Op.OP_REG:
-                                        loc += Enum.GetName(typeof(Op), op) + "(0x" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString("x") + ") ";
+                                    {
+                                        uint reg = ELF.ReadUInt32(elf_data, elf.GetEndian());
+                                        uint regLE = BinaryPrimitives.ReverseEndianness(reg);
+
+                                        if(enableQuirks)
+                                            reg = Math.Min(reg, regLE);
+
+                                        loc += $"{Enum.GetName(typeof(Op), op)}(0x{reg.ToString("x")}) ";
                                         i += 4;
-                                        break;
+                                    } break;
                                     case (int)Op.OP_ADD:
                                     case (int)Op.OP_DEREF:
                                     case (int)Op.OP_DEREF2:
                                     case (int)Op.OP_hi_user:
                                     case (int)Op.OP_lo_user:
+                                    {
                                         loc += Enum.GetName(typeof(Op), op) + " ";
-                                        break;
+                                    } break;
                                 }
                             }
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + loc + ")");
-                            break;
+                        } break;
                         case (int)At.AT_mod_fund_type:
+                        {
                             string mod_f = "";
+
+                            // It sometimes happens in SIM.elf (OOT/Majora) that
+                            // the mod byte and the type are switched. It only
+                            // happens when value == 3, so I don't know if a
+                            // more sophisticated check is needed or if this
+                            // suffices...
+                            bool typeOverride = false;
+                            ushort type = 0;
+
                             for (uint i = 0; i < (value - 2); i++)
                             {
-                                mod_f += Enum.GetName(typeof(Mod), elf_data.ReadByte()) + " ";
+                                int mod = elf_data.ReadByte();
+
+                                if(!Enum.IsDefined(typeof(Mod), mod))
+                                {
+                                    typeOverride = true;
+                                    type = (ushort)(mod << 8);
+                                    mod = elf_data.ReadByte();
+                                }
+
+                                mod_f += Enum.GetName(typeof(Mod), mod) + " ";
                             }
-                            mod_f += Enum.GetName(typeof(Ft), ELF.ReadUInt16(elf_data, elf.GetEndian()));
+
+                            if(typeOverride)
+                                type |= (ushort)elf_data.ReadByte();
+                            else
+                                type = ELF.ReadUInt16(elf_data, elf.GetEndian());
+
+                            mod_f += Enum.GetName(typeof(Ft), type);
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + mod_f + ")");
-                            break;
+                        } break;
                         case (int)At.AT_mod_u_d_type:
+                        {
                             string mod = "";
                             for (uint i = 0; i < (value - 4); i++)
                             {
@@ -342,8 +541,9 @@ namespace dwarfone
                             }
                             mod += "0x" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString("x");
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + mod + ")");
-                            break;
+                        } break;
                         case (int)At.AT_element_list:
+                        {
                             string list = "";
                             long start_pos_list = elf_data.Position;
                             while (elf_data.Position < (start_pos_list + (long)value))
@@ -351,8 +551,9 @@ namespace dwarfone
                                 list += "(" + ELF.ReadUInt32(elf_data, elf.GetEndian()).ToString() + "=\"" + ELF.ReadString(elf_data) + "\")";
                             }
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + list + ")");
-                            break;
+                        } break;
                         case (int)At.AT_subscr_data:
+                        {
                             long start_pos_sub = elf_data.Position;
                             string fmt_str = "";
                             while (elf_data.Position < (start_pos_sub + (long)value))
@@ -362,34 +563,37 @@ namespace dwarfone
                                 switch (fmt)
                                 {
                                     case (int)Fmt.FMT_ET:
-                                        GetAT(elf, elf_data, out fmt_str_out);
+                                    {
+                                        GetAT(elf, elf_data, out fmt_str_out, enableQuirks);
                                         fmt_str += "FMT_ET: " + fmt_str_out.Substring(8) + ", ";
-                                        break;
+                                    } break;
                                     case (int)Fmt.FMT_FT_C_C:
+                                    {
                                         ushort fmt_ft = ELF.ReadUInt16(elf_data, elf.GetEndian());
                                         uint lo = ELF.ReadUInt32(elf_data, elf.GetEndian());
                                         uint hi = ELF.ReadUInt32(elf_data, elf.GetEndian());
                                         fmt_str += Enum.GetName(typeof(Ft), fmt_ft) + "[" + lo + ":" + hi + "], ";
-                                        break;
+                                    } break;
                                     default:
                                         elf_data.ReadByte();
-                                        break;
+                                    break;
                                 }
                             }
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + ">" + fmt_str.Substring(0, fmt_str.Length - 2) + ")");
-                            break;
+                        } break;
                         case (int)At.AT_discr_value:
                         case (int)At.AT_string_length:
                         case (int)At.AT_const_value:
                         case (int)At.AT_friends:
-                        case (int)At.AT_return_addr:
+                        case (int)At.AT_codewarrior_custom:
                         default:
+                        {
                             for (uint i = 0; i < value; i++)
                                 elf_data.ReadByte();
                             text = ("        " + Enum.GetName(typeof(At), at & 0xFFF0) + "(<" + value + "> TODO" + ")");
-                            break;
+                        } break;
                     }
-                    break;
+                } break;
             }
             return 0;
         }

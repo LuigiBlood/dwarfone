@@ -14,17 +14,20 @@ namespace dwarfone
 
             if (args.Length == 0)
             {
-                Console.WriteLine("Usage: dwarfone <elf file>");
+                Console.WriteLine("Usage: dwarfone [--enable-quirks] <elf file>");
             }
             else
             {
-                ELF elf = new ELF(args[0]);
+                bool quirksEnabled = args[0] == "--enable-quirks";
+                string name = quirksEnabled ? args[1] : args[0];
+
+                ELF elf = new ELF(name);
                 if (elf.GetError() != 0)
                     Console.WriteLine("Error Code: " + elf.GetError());
                 else
                     Console.WriteLine("ELF file successfully loaded");
 
-                DWARF.DumpDWARF(elf);
+                DWARF.DumpDWARF(elf, quirksEnabled);
             }
         }
     }
